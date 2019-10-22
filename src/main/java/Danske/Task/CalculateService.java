@@ -1,9 +1,8 @@
 package Danske.Task;
 
-import org.springframework.stereotype.Service;
+import java.util.List;
 
-@Service
-public class CalculateService {
+public interface CalculateService {
 
-
+    List<CalculateServiceImpl.SumAndIndex> calculateNodeValue(CalculateServiceImpl.SumAndIndex currentNode, int val);
 }
