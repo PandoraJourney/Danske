@@ -3,7 +3,6 @@ package Danske.Task;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.ClosedWatchServiceException;
-import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,7 +14,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -28,9 +26,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 
-import static java.nio.file.Files.newDirectoryStream;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
 import static java.nio.file.StandardWatchEventKinds.OVERFLOW;
 import static java.util.stream.Collectors.toList;
@@ -73,22 +69,21 @@ public class PathWatch {
                             Path csvFile = ev.context();
                             if (StringUtils.endsWithIgnoreCase(csvFile.getFileName().toString(), ".csv")) {
                                 LOG.info("Csv file found. Starting file processing");
-                                List<CalculateServiceImpl.SumAndIndex> start = ImmutableList.of(
+                                List<CalculateServiceImpl.SumAndIndex> proocessedNodes = ImmutableList.of(
                                         new CalculateServiceImpl.SumAndIndex(0, 0, -1, new ArrayList<>()));
                                 try(BufferedReader br =
                                             Files.newBufferedReader((newFileDir.resolve(csvFile)))) {
                                     String line;
-                                    LOG.info("Reading file lines.");
                                     while ((line = br.readLine()) != null) {
                                         List<Integer> numbers = CsvUtility.parseLine(line);
-                                        start = start.stream()
-                                                     .map(a -> createNewObjects(a, numbers))
+                                        proocessedNodes = proocessedNodes.stream()
+                                                     .map(a -> processNode(a, numbers))
                                                      .flatMap(List::stream)
                                                      .collect(toList());
-                                        LOG.info("Stopped proccessing line");
+                                        LOG.info("Stopped processing line");
                                     }
 
-                                    CalculateServiceImpl.SumAndIndex sum = start.stream()
+                                    CalculateServiceImpl.SumAndIndex sum = proocessedNodes.stream()
                                                                                 .max(Comparator.comparingInt(CalculateServiceImpl.SumAndIndex::getSum))
                                                                                 .orElse(new CalculateServiceImpl.SumAndIndex(0, 0, -1, ImmutableList.of()));
                                     LOG.info("Sum is: " + sum.getSum());
@@ -115,10 +110,9 @@ public class PathWatch {
         }
     }
 
-    private List<CalculateServiceImpl.SumAndIndex> createNewObjects(
+    private List<CalculateServiceImpl.SumAndIndex> processNode(
             CalculateServiceImpl.SumAndIndex value,
             List<Integer> line) {
-        LOG.info("Creating SumAndIndex");
         return service.calculateNodeValue(value, line.get(value.getTargetIndex()));
     }
 
