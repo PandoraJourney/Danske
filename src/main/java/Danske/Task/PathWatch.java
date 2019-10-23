@@ -10,9 +10,11 @@ import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import javax.annotation.PostConstruct;
@@ -29,7 +31,7 @@ import com.google.common.collect.ImmutableList;
 
 import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
 import static java.nio.file.StandardWatchEventKinds.OVERFLOW;
-import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
 
 @Component
 public class PathWatch {
@@ -69,23 +71,26 @@ public class PathWatch {
                             Path csvFile = ev.context();
                             if (StringUtils.endsWithIgnoreCase(csvFile.getFileName().toString(), ".csv")) {
                                 LOG.info("Csv file found. Starting file processing");
-                                List<CalculateServiceImpl.SumAndIndex> proocessedNodes = ImmutableList.of(
-                                        new CalculateServiceImpl.SumAndIndex(0, 0, -1, new ArrayList<>()));
-                                try(BufferedReader br =
-                                            Files.newBufferedReader((newFileDir.resolve(csvFile)))) {
+                                Collection<CalculateServiceImpl.SumAndIndex> processedNodes =
+                                        ImmutableList.of(new CalculateServiceImpl.SumAndIndex(0, 0, -1, new ArrayList<>()));
+                                try(BufferedReader br = Files.newBufferedReader((newFileDir.resolve(csvFile)))) {
                                     String line;
                                     while ((line = br.readLine()) != null) {
-                                        List<Integer> numbers = CsvUtility.parseLine(line);
-                                        proocessedNodes = proocessedNodes.stream()
-                                                     .map(a -> processNode(a, numbers))
-                                                     .flatMap(List::stream)
-                                                     .collect(toList());
-                                        LOG.info("Stopped processing line");
+                                        List<Integer> parsedLine = CsvUtility.parseLine(line);
+                                        processedNodes =
+                                                processedNodes.stream()
+                                                               .map(node -> processNode(node, parsedLine))
+                                                               .flatMap(List::stream)
+                                                               .collect(toMap(CalculateServiceImpl.SumAndIndex::getIndexWithReminder,
+                                                                                                         Function.identity(),
+                                                                                                         this::removeCrossPath))
+                                                               .values();
                                     }
 
-                                    CalculateServiceImpl.SumAndIndex sum = proocessedNodes.stream()
-                                                                                .max(Comparator.comparingInt(CalculateServiceImpl.SumAndIndex::getSum))
-                                                                                .orElse(new CalculateServiceImpl.SumAndIndex(0, 0, -1, ImmutableList.of()));
+                                    CalculateServiceImpl.SumAndIndex sum =
+                                            processedNodes.stream()
+                                                          .max(Comparator.comparingInt(CalculateServiceImpl.SumAndIndex::getSum))
+                                                          .orElse(new CalculateServiceImpl.SumAndIndex(0, 0, -1, ImmutableList.of()));
                                     LOG.info("Sum is: " + sum.getSum());
                                     String path = sum.getPath()
                                                      .stream()
@@ -113,7 +118,12 @@ public class PathWatch {
     private List<CalculateServiceImpl.SumAndIndex> processNode(
             CalculateServiceImpl.SumAndIndex value,
             List<Integer> line) {
-        return service.calculateNodeValue(value, line.get(value.getTargetIndex()));
+        return service.calculateNodeValue(value,
+                                          line.get(value.getIndexWithReminder().getTargetIndex()));
+    }
+
+    private CalculateServiceImpl.SumAndIndex removeCrossPath(CalculateServiceImpl.SumAndIndex first, CalculateServiceImpl.SumAndIndex second) {
+        return first.getSum() > second.getSum() ? first : second;
     }
 
     @PreDestroy

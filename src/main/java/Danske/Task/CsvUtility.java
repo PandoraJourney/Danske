@@ -15,7 +15,6 @@ public class CsvUtility {
         return StreamSupport.stream(SPLITTER.split(line).spliterator(), false)
                             .filter(Objects::nonNull)
                             .filter(a -> !a.isEmpty())
-                            .peek(System.out::println)
                             .map(Integer::parseInt)
                             .collect(Collectors.toList());
     }
